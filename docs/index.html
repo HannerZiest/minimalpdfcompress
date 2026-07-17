@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MinimalPDF Compress — Web</title>
-<meta name="description" content="Compress PDFs and convert images to compressed PDFs, entirely in your browser. No uploads, no servers.">
+<meta name="description" content="Drop PDFs and pictures, get one compressed PDF back. Everything runs in your browser — no uploads, no servers.">
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/pdf-lib.min.js"></script>
 <style>
@@ -40,18 +40,7 @@
   header a:hover { text-decoration: underline; }
 
   .app { width: 100%; max-width: 680px; }
-
-  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-  .tab {
-    flex: 1; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
-    background: var(--surface); color: var(--muted); font-size: 0.95rem; font-weight: 600;
-    cursor: pointer; transition: all 0.15s;
-  }
-  .tab:hover { border-color: var(--accent); color: var(--text); }
-  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-
-  .panel { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
-  .panel.active { display: block; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
 
   .dropzone {
     border: 2px dashed var(--border); border-radius: var(--radius); padding: 36px 16px;
@@ -67,15 +56,18 @@
     display: flex; align-items: center; gap: 10px; background: var(--surface2);
     border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 0.88rem;
   }
-  .fileitem img.thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; background: #000; }
+  .fileitem img.thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; background: #000; flex-shrink: 0; }
+  .fileitem .picon { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
   .fileitem .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fileitem .fsize { color: var(--muted); flex-shrink: 0; }
   .fileitem button {
     background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem;
     padding: 2px 6px; border-radius: 5px; flex-shrink: 0;
   }
-  .fileitem button:hover { color: var(--text); background: var(--border); }
+  .fileitem button:hover:not(:disabled) { color: var(--text); background: var(--border); }
+  .fileitem button:disabled { opacity: 0.3; cursor: default; }
   .fileitem button.rm:hover { color: var(--red); }
+  .hint { margin-top: 10px; font-size: 0.8rem; color: var(--muted); text-align: center; }
 
   .controls { margin-top: 18px; display: flex; flex-direction: column; gap: 14px; }
   .control label { display: flex; justify-content: space-between; font-size: 0.88rem; color: var(--muted); margin-bottom: 6px; }
@@ -95,10 +87,6 @@
   .row .control { flex: 1; min-width: 180px; }
   .check { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; user-select: none; }
   .check input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
-  select {
-    width: 100%; padding: 8px 10px; background: var(--surface2); color: var(--text);
-    border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; cursor: pointer;
-  }
 
   .go {
     margin-top: 18px; width: 100%; padding: 14px; border: none; border-radius: var(--radius);
@@ -137,85 +125,38 @@
 
 <header>
   <h1>MinimalPDF <span>Compress</span></h1>
-  <p>Compress PDFs &amp; turn images into compressed PDFs — 100% in your browser, nothing is uploaded.</p>
-  <p>Need more power (lossless mode, merge, split, watermark…)? Get the <a href="https://github.com/HannerZiest/minimalpdfcompress/releases">desktop app</a>.</p>
+  <p>Drop PDFs and pictures together — get <strong style="color:var(--text)">one compressed PDF</strong> back. 100% in your browser, nothing is uploaded.</p>
+  <p>Need more power (lossless mode, split, watermark…)? Get the <a href="https://github.com/HannerZiest/minimalpdfcompress/releases">desktop app</a>.</p>
 </header>
 
 <div class="app">
-  <div class="tabs">
-    <button class="tab active" data-tab="compress">📄 Compress PDF</button>
-    <button class="tab" data-tab="img2pdf">🖼️ Images → PDF</button>
-  </div>
-
-  <!-- ============ COMPRESS PDF ============ -->
-  <div class="panel active" id="panel-compress">
-    <div class="dropzone" id="dz-pdf">
-      <span class="icon">📄</span>
-      <strong>Drop a PDF here</strong> or click to browse
-      <input type="file" id="in-pdf" accept="application/pdf">
+  <div class="panel">
+    <div class="dropzone" id="dz">
+      <span class="icon">📄🖼️</span>
+      <strong>Drop PDFs and/or pictures here</strong> or click to browse<br>
+      (PDF, JPG, PNG, WebP… — add as many as you want)
+      <input type="file" id="in-files" accept="application/pdf,image/*" multiple>
     </div>
-    <div class="filelist" id="list-pdf"></div>
+    <div class="filelist" id="list"></div>
+    <div class="hint" id="hint" style="display:none">Pages go into the PDF in this order — use ▲▼ to rearrange.</div>
 
     <div class="controls">
       <div class="row">
         <div class="control">
-          <label>Image quality <output id="out-q1">70%</output></label>
-          <input type="range" id="q1" min="10" max="95" value="70">
+          <label>Image quality <output id="out-q">70%</output></label>
+          <input type="range" id="q" min="10" max="95" value="70">
         </div>
         <div class="control">
-          <label>Resolution (DPI) <output id="out-dpi1">120</output></label>
-          <input type="range" id="dpi1" min="50" max="300" step="10" value="120">
+          <label>Resolution (DPI) <output id="out-dpi">120</output></label>
+          <input type="range" id="dpi" min="50" max="300" step="10" value="120">
         </div>
       </div>
-      <label class="check"><input type="checkbox" id="gray1"> Convert to grayscale</label>
-      <label class="check"><input type="checkbox" id="nolarger" checked> Don't output if larger than original</label>
+      <label class="check"><input type="checkbox" id="gray"> Convert to grayscale</label>
     </div>
 
-    <button class="go" id="go-pdf" disabled>Compress</button>
-    <div class="progress" id="prog-pdf"><div class="bar"><div class="fill"></div></div><div class="label">Working…</div></div>
-    <div class="result" id="res-pdf"></div>
-  </div>
-
-  <!-- ============ IMAGES TO PDF ============ -->
-  <div class="panel" id="panel-img2pdf">
-    <div class="dropzone" id="dz-img">
-      <span class="icon">🖼️</span>
-      <strong>Drop images here</strong> or click to browse (JPG, PNG, WebP…) — you can add multiple
-      <input type="file" id="in-img" accept="image/*" multiple>
-    </div>
-    <div class="filelist" id="list-img"></div>
-
-    <div class="controls">
-      <div class="row">
-        <div class="control">
-          <label>Image quality <output id="out-q2">75%</output></label>
-          <input type="range" id="q2" min="10" max="95" value="75">
-        </div>
-        <div class="control">
-          <label>Max image dimension <output id="out-dim2">2000&nbsp;px</output></label>
-          <input type="range" id="dim2" min="600" max="4000" step="100" value="2000">
-        </div>
-      </div>
-      <div class="row">
-        <div class="control">
-          <label>Page size</label>
-          <select id="pagesize">
-            <option value="fit" selected>Fit to image</option>
-            <option value="a4p">A4 portrait</option>
-            <option value="a4l">A4 landscape</option>
-            <option value="letterp">Letter portrait</option>
-            <option value="letterl">Letter landscape</option>
-          </select>
-        </div>
-        <div class="control" style="display:flex;align-items:flex-end;">
-          <label class="check"><input type="checkbox" id="gray2"> Convert to grayscale</label>
-        </div>
-      </div>
-    </div>
-
-    <button class="go" id="go-img" disabled>Create PDF</button>
-    <div class="progress" id="prog-img"><div class="bar"><div class="fill"></div></div><div class="label">Working…</div></div>
-    <div class="result" id="res-img"></div>
+    <button class="go" id="go" disabled>Compress</button>
+    <div class="progress" id="prog"><div class="bar"><div class="fill"></div></div><div class="label">Working…</div></div>
+    <div class="result" id="res"></div>
   </div>
 </div>
 
@@ -232,37 +173,172 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
 const $ = s => document.querySelector(s);
 const fmtSize = b => b < 1024*1024 ? (b/1024).toFixed(1)+" KB" : (b/1024/1024).toFixed(2)+" MB";
 
-/* ---------- tabs ---------- */
-document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
-  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-  document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
-  t.classList.add("active");
-  $("#panel-" + t.dataset.tab).classList.add("active");
-}));
-
 /* ---------- slider outputs ---------- */
-const bindOut = (id, out, fmt = v => v) => {
-  const el = $(id);
-  el.addEventListener("input", () => $(out).innerHTML = fmt(el.value));
-};
-bindOut("#q1", "#out-q1", v => v + "%");
-bindOut("#dpi1", "#out-dpi1");
-bindOut("#q2", "#out-q2", v => v + "%");
-bindOut("#dim2", "#out-dim2", v => v + "&nbsp;px");
+$("#q").addEventListener("input", () => $("#out-q").textContent = $("#q").value + "%");
+$("#dpi").addEventListener("input", () => $("#out-dpi").textContent = $("#dpi").value);
 
-/* ---------- dropzone helper ---------- */
-function setupDrop(zoneId, inputId, onFiles) {
-  const zone = $(zoneId), input = $(inputId);
-  zone.addEventListener("click", () => input.click());
-  input.addEventListener("change", () => { onFiles([...input.files]); input.value = ""; });
-  zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
-  zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
-  zone.addEventListener("drop", e => {
-    e.preventDefault(); zone.classList.remove("dragover");
-    onFiles([...e.dataTransfer.files]);
-  });
+/* ---------- file handling ---------- */
+let files = []; // {file, kind: "pdf" | "image"}
+
+const dz = $("#dz"), input = $("#in-files");
+dz.addEventListener("click", () => input.click());
+input.addEventListener("change", () => { addFiles([...input.files]); input.value = ""; });
+dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("dragover"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("dragover"));
+dz.addEventListener("drop", e => {
+  e.preventDefault(); dz.classList.remove("dragover");
+  addFiles([...e.dataTransfer.files]);
+});
+
+function addFiles(newFiles) {
+  for (const f of newFiles) {
+    if (f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")) {
+      files.push({ file: f, kind: "pdf" });
+    } else if (f.type.startsWith("image/")) {
+      files.push({ file: f, kind: "image" });
+    }
+  }
+  $("#res").classList.remove("show");
+  renderList();
 }
 
+function renderList() {
+  const list = $("#list");
+  list.innerHTML = "";
+  files.forEach((item, idx) => {
+    const div = document.createElement("div");
+    div.className = "fileitem";
+    div.innerHTML = `
+      ${item.kind === "image" ? '<img class="thumb" alt="">' : '<span class="picon">📄</span>'}
+      <span class="fname">${item.file.name}</span>
+      <span class="fsize">${fmtSize(item.file.size)}</span>
+      <button class="up" title="Move up" ${idx === 0 ? "disabled" : ""}>▲</button>
+      <button class="down" title="Move down" ${idx === files.length - 1 ? "disabled" : ""}>▼</button>
+      <button class="rm" title="Remove">✕</button>`;
+    if (item.kind === "image") {
+      const thumb = div.querySelector(".thumb");
+      const url = URL.createObjectURL(item.file);
+      thumb.src = url;
+      thumb.onload = () => URL.revokeObjectURL(url);
+    }
+    div.querySelector(".up").addEventListener("click", () => {
+      [files[idx - 1], files[idx]] = [files[idx], files[idx - 1]]; renderList();
+    });
+    div.querySelector(".down").addEventListener("click", () => {
+      [files[idx + 1], files[idx]] = [files[idx], files[idx + 1]]; renderList();
+    });
+    div.querySelector(".rm").addEventListener("click", () => {
+      files.splice(idx, 1); renderList();
+    });
+    list.appendChild(div);
+  });
+  $("#go").disabled = files.length === 0;
+  $("#hint").style.display = files.length > 1 ? "" : "none";
+}
+
+/* ---------- main pipeline: images -> PDF pages, then compress everything ---------- */
+$("#go").addEventListener("click", async () => {
+  if (!files.length) return;
+  const btn = $("#go"), prog = $("#prog"), res = $("#res");
+  btn.disabled = true; res.classList.remove("show");
+  const quality = $("#q").value / 100;
+  const dpi = +$("#dpi").value;
+  const gray = $("#gray").checked;
+
+  try {
+    // Count total pages first so the progress bar is honest
+    setProgress(prog, 0, "Reading files…");
+    let totalPages = 0;
+    const loaded = [];
+    for (const item of files) {
+      if (item.kind === "pdf") {
+        const bytes = new Uint8Array(await item.file.arrayBuffer());
+        const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+        totalPages += pdf.numPages;
+        loaded.push({ ...item, pdf });
+      } else {
+        totalPages += 1;
+        loaded.push(item);
+      }
+    }
+
+    const outDoc = await PDFLib.PDFDocument.create();
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    let done = 0;
+    let totalIn = 0;
+
+    for (const item of loaded) {
+      totalIn += item.file.size;
+
+      if (item.kind === "image") {
+        // Step 1: picture becomes a PDF page (compressed at the chosen quality/DPI)
+        setProgress(prog, done / totalPages, `Adding picture ${item.file.name}…`);
+        const bmp = await loadImage(item.file);
+        // Scale the picture as if printed at ~8" wide, honoring the DPI slider
+        const maxPx = Math.round(8 * dpi);
+        let w = bmp.width, h = bmp.height;
+        if (Math.max(w, h) > maxPx) {
+          const s = maxPx / Math.max(w, h);
+          w = Math.round(w * s); h = Math.round(h * s);
+        }
+        canvas.width = w; canvas.height = h;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);          // flatten transparency to white
+        ctx.drawImage(bmp, 0, 0, w, h);
+        if (bmp.close) bmp.close();
+        if (gray) grayscaleCanvas(canvas, ctx);
+
+        const img = await outDoc.embedJpg(await canvasToJpeg(canvas, quality));
+        const pw = w * (72 / dpi), ph = h * (72 / dpi); // physical size from DPI
+        const p = outDoc.addPage([pw, ph]);
+        p.drawImage(img, { x: 0, y: 0, width: pw, height: ph });
+        done++;
+      } else {
+        // Step 2: PDF pages get re-rendered at the chosen quality/DPI
+        for (let i = 1; i <= item.pdf.numPages; i++) {
+          setProgress(prog, done / totalPages, `Compressing ${item.file.name} — page ${i} of ${item.pdf.numPages}…`);
+          const page = await item.pdf.getPage(i);
+          const vp1 = page.getViewport({ scale: 1 });   // 72 DPI baseline
+          const vp = page.getViewport({ scale: dpi / 72 });
+          canvas.width = Math.ceil(vp.width);
+          canvas.height = Math.ceil(vp.height);
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: ctx, viewport: vp }).promise;
+          if (gray) grayscaleCanvas(canvas, ctx);
+
+          const img = await outDoc.embedJpg(await canvasToJpeg(canvas, quality));
+          // page keeps original point dimensions so the PDF prints at true size
+          const p = outDoc.addPage([vp1.width, vp1.height]);
+          p.drawImage(img, { x: 0, y: 0, width: vp1.width, height: vp1.height });
+          done++;
+        }
+      }
+    }
+
+    setProgress(prog, 1, "Assembling PDF…");
+    const outBytes = await outDoc.save();
+    prog.classList.remove("show");
+
+    const after = outBytes.length;
+    const pct = ((1 - after / totalIn) * 100).toFixed(1);
+    const name = files.length === 1
+      ? files[0].file.name.replace(/\.[^.]+$/, "") + "_compressed.pdf"
+      : "compressed.pdf";
+    const cls = after < totalIn ? "saved" : "grew";
+    const sign = after < totalIn ? "−" + pct : "+" + Math.abs(pct);
+    showResult(res, `<div class="stats">${totalPages} page${totalPages > 1 ? "s" : ""} —
+      ${fmtSize(totalIn)} → ${fmtSize(after)} (<b class="${cls}">${sign}%</b>)</div>
+      ${downloadLink(outBytes, name)}`);
+  } catch (err) {
+    prog.classList.remove("show");
+    showResult(res, `<div class="stats">⚠️ ${err.message || "Failed to process these files (a PDF may be encrypted or corrupted)."}</div>`, true);
+  }
+  btn.disabled = false;
+});
+
+/* ---------- helpers ---------- */
 function showResult(el, html, isError = false) {
   el.className = "result show" + (isError ? " error" : "");
   el.innerHTML = html;
@@ -276,202 +352,6 @@ function downloadLink(bytes, name) {
   const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
   return `<a class="dl" href="${url}" download="${name}">⬇ Download ${name}</a>`;
 }
-
-/* ================= COMPRESS PDF ================= */
-let pdfFile = null;
-
-setupDrop("#dz-pdf", "#in-pdf", files => {
-  const f = files.find(f => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
-  if (!f) return;
-  pdfFile = f;
-  $("#list-pdf").innerHTML = `
-    <div class="fileitem">
-      <span>📄</span><span class="fname">${f.name}</span>
-      <span class="fsize">${fmtSize(f.size)}</span>
-      <button class="rm" title="Remove">✕</button>
-    </div>`;
-  $("#list-pdf .rm").addEventListener("click", () => {
-    pdfFile = null; $("#list-pdf").innerHTML = ""; $("#go-pdf").disabled = true;
-    $("#res-pdf").classList.remove("show");
-  });
-  $("#go-pdf").disabled = false;
-  $("#res-pdf").classList.remove("show");
-});
-
-$("#go-pdf").addEventListener("click", async () => {
-  if (!pdfFile) return;
-  const btn = $("#go-pdf"), prog = $("#prog-pdf"), res = $("#res-pdf");
-  btn.disabled = true; res.classList.remove("show");
-  const quality = $("#q1").value / 100;
-  const dpi = +$("#dpi1").value;
-  const gray = $("#gray1").checked;
-
-  try {
-    const srcBytes = new Uint8Array(await pdfFile.arrayBuffer());
-    const pdf = await pdfjsLib.getDocument({ data: srcBytes.slice() }).promise;
-    const outDoc = await PDFLib.PDFDocument.create();
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      setProgress(prog, (i - 1) / pdf.numPages, `Rendering page ${i} of ${pdf.numPages}…`);
-      const page = await pdf.getPage(i);
-      const vp1 = page.getViewport({ scale: 1 });     // 72 DPI baseline
-      const scale = dpi / 72;
-      const vp = page.getViewport({ scale });
-      canvas.width = Math.ceil(vp.width);
-      canvas.height = Math.ceil(vp.height);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      if (gray) grayscaleCanvas(canvas, ctx);
-
-      const jpgBytes = await canvasToJpeg(canvas, quality);
-      const img = await outDoc.embedJpg(jpgBytes);
-      // page keeps original point dimensions so the PDF prints at true size
-      const p = outDoc.addPage([vp1.width, vp1.height]);
-      p.drawImage(img, { x: 0, y: 0, width: vp1.width, height: vp1.height });
-    }
-
-    setProgress(prog, 1, "Assembling PDF…");
-    const outBytes = await outDoc.save();
-    prog.classList.remove("show");
-
-    const before = pdfFile.size, after = outBytes.length;
-    const pct = ((1 - after / before) * 100).toFixed(1);
-    const name = pdfFile.name.replace(/\.pdf$/i, "") + "_compressed.pdf";
-
-    if ($("#nolarger").checked && after >= before) {
-      showResult(res, `<div class="stats">Result (${fmtSize(after)}) is not smaller than the original
-        (${fmtSize(before)}). The file was likely already optimized — try lowering quality/DPI, or
-        uncheck "Don't output if larger".</div>`, true);
-    } else {
-      const cls = after < before ? "saved" : "grew";
-      showResult(res, `<div class="stats">${fmtSize(before)} → ${fmtSize(after)}
-        &nbsp;(<b class="${cls}">${after < before ? "−" + pct + "%" : "+" + Math.abs(pct) + "%"}</b>)</div>
-        ${downloadLink(outBytes, name)}`);
-    }
-  } catch (err) {
-    prog.classList.remove("show");
-    showResult(res, `<div class="stats">⚠️ ${err.message || "Failed to process this PDF (it may be encrypted or corrupted)."}</div>`, true);
-  }
-  btn.disabled = false;
-});
-
-/* ================= IMAGES TO PDF ================= */
-let imgFiles = [];
-
-function renderImgList() {
-  const list = $("#list-img");
-  list.innerHTML = "";
-  imgFiles.forEach((f, idx) => {
-    const div = document.createElement("div");
-    div.className = "fileitem";
-    div.innerHTML = `
-      <img class="thumb" alt="">
-      <span class="fname">${f.name}</span>
-      <span class="fsize">${fmtSize(f.size)}</span>
-      <button class="up" title="Move up" ${idx === 0 ? "disabled" : ""}>▲</button>
-      <button class="down" title="Move down" ${idx === imgFiles.length - 1 ? "disabled" : ""}>▼</button>
-      <button class="rm" title="Remove">✕</button>`;
-    const thumb = div.querySelector(".thumb");
-    const url = URL.createObjectURL(f);
-    thumb.src = url;
-    thumb.onload = () => URL.revokeObjectURL(url);
-    div.querySelector(".up").addEventListener("click", () => {
-      [imgFiles[idx - 1], imgFiles[idx]] = [imgFiles[idx], imgFiles[idx - 1]]; renderImgList();
-    });
-    div.querySelector(".down").addEventListener("click", () => {
-      [imgFiles[idx + 1], imgFiles[idx]] = [imgFiles[idx], imgFiles[idx + 1]]; renderImgList();
-    });
-    div.querySelector(".rm").addEventListener("click", () => {
-      imgFiles.splice(idx, 1); renderImgList();
-    });
-    list.appendChild(div);
-  });
-  $("#go-img").disabled = imgFiles.length === 0;
-}
-
-setupDrop("#dz-img", "#in-img", files => {
-  imgFiles.push(...files.filter(f => f.type.startsWith("image/")));
-  renderImgList();
-  $("#res-img").classList.remove("show");
-});
-
-const PAGE_SIZES = {
-  a4p: [595.28, 841.89], a4l: [841.89, 595.28],
-  letterp: [612, 792], letterl: [792, 612],
-};
-
-$("#go-img").addEventListener("click", async () => {
-  if (!imgFiles.length) return;
-  const btn = $("#go-img"), prog = $("#prog-img"), res = $("#res-img");
-  btn.disabled = true; res.classList.remove("show");
-  const quality = $("#q2").value / 100;
-  const maxDim = +$("#dim2").value;
-  const gray = $("#gray2").checked;
-  const sizeMode = $("#pagesize").value;
-
-  try {
-    const outDoc = await PDFLib.PDFDocument.create();
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    let totalIn = 0;
-
-    for (let i = 0; i < imgFiles.length; i++) {
-      const f = imgFiles[i];
-      totalIn += f.size;
-      setProgress(prog, i / imgFiles.length, `Processing image ${i + 1} of ${imgFiles.length}…`);
-
-      const bmp = await loadImage(f);
-      let w = bmp.width, h = bmp.height;
-      if (Math.max(w, h) > maxDim) {
-        const s = maxDim / Math.max(w, h);
-        w = Math.round(w * s); h = Math.round(h * s);
-      }
-      canvas.width = w; canvas.height = h;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, w, h);            // flatten transparency to white
-      ctx.drawImage(bmp, 0, 0, w, h);
-      if (bmp.close) bmp.close();
-      if (gray) grayscaleCanvas(canvas, ctx);
-
-      const jpgBytes = await canvasToJpeg(canvas, quality);
-      const img = await outDoc.embedJpg(jpgBytes);
-
-      if (sizeMode === "fit") {
-        // 96 px/inch → 72 pt/inch so the page has a sane physical size
-        const pw = w * 0.75, ph = h * 0.75;
-        const p = outDoc.addPage([pw, ph]);
-        p.drawImage(img, { x: 0, y: 0, width: pw, height: ph });
-      } else {
-        const [pw, ph] = PAGE_SIZES[sizeMode];
-        const margin = 24;
-        const s = Math.min((pw - margin * 2) / w, (ph - margin * 2) / h);
-        const dw = w * s, dh = h * s;
-        const p = outDoc.addPage([pw, ph]);
-        p.drawImage(img, { x: (pw - dw) / 2, y: (ph - dh) / 2, width: dw, height: dh });
-      }
-    }
-
-    setProgress(prog, 1, "Assembling PDF…");
-    const outBytes = await outDoc.save();
-    prog.classList.remove("show");
-
-    const name = imgFiles.length === 1
-      ? imgFiles[0].name.replace(/\.[^.]+$/, "") + ".pdf"
-      : "images_compressed.pdf";
-    showResult(res, `<div class="stats">${imgFiles.length} image${imgFiles.length > 1 ? "s" : ""}
-      (${fmtSize(totalIn)}) → <b class="saved">${fmtSize(outBytes.length)}</b> PDF</div>
-      ${downloadLink(outBytes, name)}`);
-  } catch (err) {
-    prog.classList.remove("show");
-    showResult(res, `<div class="stats">⚠️ ${err.message || "Failed to process images."}</div>`, true);
-  }
-  btn.disabled = false;
-});
-
-/* ---------- shared helpers ---------- */
 function loadImage(file) {
   if (window.createImageBitmap) return createImageBitmap(file).catch(() => loadImageEl(file));
   return loadImageEl(file);
